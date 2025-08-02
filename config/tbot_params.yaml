@@ -1,0 +1,18 @@
+tbot_node:
+  ros__parameters:
+    # 机器人IP地址
+    robot_ip: "192.168.8.110"
+    
+    # 导航参数
+    navigation_precision_xy: 0.1
+    navigation_precision_yaw: 0.1
+    
+    # 速度限制
+    max_linear_speed: 1.0
+    max_angular_speed: 1.0
+    
+    # 安全设置
+    enable_collision_monitor: true
+    
+    # 数据发布频率 (Hz)
+    publish_rate: 10.0 
