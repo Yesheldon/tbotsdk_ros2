@@ -124,42 +124,83 @@ ros2 run tf2_tools view_frames
 
 ## 测试
 
+### 测试结构
+
+测试文件已重新组织为两大类，统一放在 `test` 目录下：
+
+#### 静态功能测试 (`test/static/`)
+静态功能主要测试数据收集和状态监控功能，不涉及机器人的实际运动：
+- **连接状态测试** (`test_connection.cpp`) - 测试机器人连接、断开连接、状态检查
+- **数据流测试** (`test_data_stream.cpp`) - 测试机器人数据和地图数据流
+- **机器人状态测试** (`test_robot_status.cpp`) - 测试电池状态、系统状态等
+- **地图状态测试** (`test_map_status.cpp`) - 测试地图列表、当前地图、地图状态
+
+#### 动态功能测试 (`test/dynamic/`)
+动态功能主要测试机器人的运动控制和导航功能：
+- **导航功能测试** (`test_navigation.cpp`) - 测试导航启动、目标导航、停止等
+- **速度控制测试** (`test_velocity_control.cpp`) - 测试速度控制、停止、急停等
+- **位置点管理测试** (`test_waypoints.cpp`) - 测试位置点保存、加载、导航等
+
+### 运行测试
+
+#### 编译测试
+```bash
+# 编译所有测试
+colcon build --packages-select tbot_sdk --cmake-args -DBUILD_TESTING=ON
+
+# 或者进入test目录编译
+cd test
+mkdir -p build && cd build
+cmake ..
+make
+```
+
+#### 运行所有测试
+```bash
+# 使用测试脚本运行所有测试
+chmod +x test/run_all_tests.sh
+./test/run_all_tests.sh
+```
+
+#### 运行分类测试
+```bash
+# 只运行静态功能测试
+chmod +x test/run_static_tests.sh
+./test/run_static_tests.sh
+
+# 只运行动态功能测试
+chmod +x test/run_dynamic_tests.sh
+./test/run_dynamic_tests.sh
+```
+
+#### 运行单个测试
+```bash
+# 进入build目录
+cd build
+
+# 运行连接测试
+./test/test_connection
+
+# 运行导航测试
+./test/test_navigation
+
+# 运行数据流测试
+./test/test_data_stream
+```
+
+### 测试特性
+
+- **Mock测试**: 使用Google Mock框架，无需实际机器人硬件
+- **全面覆盖**: 覆盖SDK的所有主要功能
+- **中文支持**: 测试用例支持中文位置点名称
+- **异步回调**: 测试异步操作和回调机制
+- **错误处理**: 包含各种错误场景的测试
+
 ### 快速测试
 ```bash
 # 运行快速测试脚本
 chmod +x scripts/quick_test.sh
 ./scripts/quick_test.sh
-```
-
-### 单元测试
-```bash
-# 编译并运行单元测试
-colcon build --packages-select tbot_sdk --cmake-args -DBUILD_TESTING=ON
-colcon test --packages-select tbot_sdk --event-handlers console_direct+
-
-# 查看测试结果
-colcon test-result --all
-```
-
-### 集成测试
-```bash
-# 运行Python集成测试
-python3 test/integration_test.py
-
-# 运行测试程序
-ros2 run tbot_sdk test_api
-
-# 运行数据流测试
-ros2 run tbot_sdk test_data_stream
-
-# 运行超时机制测试
-ros2 run tbot_sdk test_timeout
-
-# 运行位置点管理测试
-ros2 run tbot_sdk test_waypoints
-
-# 启动位置点服务
-ros2 run tbot_sdk waypoint_service
 ```
 
 ### 详细测试说明

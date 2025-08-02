@@ -23,7 +23,7 @@ public:
         m_tbot = std::make_unique<TBotSDK>(robot_ip);
         
         // 连接机器人
-        if (!m_tbot->connect([](int code, const std::string& msg) {
+        if (!m_tbot->connect([this](int code, const std::string& msg) {
             RCLCPP_INFO(this->get_logger(), "连接结果: %d - %s", code, msg.c_str());
         })) {
             RCLCPP_ERROR(this->get_logger(), "无法连接到机器人");
@@ -65,6 +65,8 @@ private:
         const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
         std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         
+        (void)request; // 避免未使用参数警告
+        
         // 获取当前时间作为位置点名称
         auto now = std::chrono::system_clock::now();
         auto time_t = std::chrono::system_clock::to_time_t(now);
@@ -96,6 +98,8 @@ private:
         const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
         std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         
+        (void)request; // 避免未使用参数警告
+        
         // 获取所有位置点
         std::vector<Waypoint> waypoints = m_tbot->getAllWaypoints("", 
             [&](int code, const std::string& msg) {
@@ -123,6 +127,8 @@ private:
     void handleNavigateToWaypoint(
         const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
         std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        
+        (void)request; // 避免未使用参数警告
         
         // 这里简化处理，导航到第一个找到的位置点
         std::vector<Waypoint> waypoints = m_tbot->getAllWaypoints("", nullptr);
@@ -157,6 +163,8 @@ private:
     void handleDeleteWaypoint(
         const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
         std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        
+        (void)request; // 避免未使用参数警告
         
         // 这里简化处理，删除第一个找到的位置点
         std::vector<Waypoint> waypoints = m_tbot->getAllWaypoints("", nullptr);

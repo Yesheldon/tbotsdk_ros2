@@ -33,6 +33,10 @@ namespace {
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
             
+            // 禁用代理
+            curl_easy_setopt(curl, CURLOPT_PROXY, "");
+            curl_easy_setopt(curl, CURLOPT_NOPROXY, "*");
+            
             // 设置超时时间
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout_sec);
             curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10); // 连接超时10秒
@@ -62,6 +66,10 @@ namespace {
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
             
+            // 禁用代理
+            curl_easy_setopt(curl, CURLOPT_PROXY, "");
+            curl_easy_setopt(curl, CURLOPT_NOPROXY, "*");
+            
             // 设置超时时间
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout_sec);
             curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10); // 连接超时10秒
@@ -82,6 +90,11 @@ namespace {
 
     // 解析JSON响应
     bool parseResponse(const std::string& response, Json::Value& root) {
+        if (response.empty()) {
+            std::cerr << "Empty response received" << std::endl;
+            return false;
+        }
+        
         Json::CharReaderBuilder builder;
         Json::CharReader* reader = builder.newCharReader();
         std::string errors;
@@ -439,7 +452,7 @@ bool TBotSDK::getRobotDataStream(RobotDataCallback callback) {
         return false;
     }
     
-    std::string url = "http://" + m_ip + ":1234/robot_data.stream";
+    std::string url = "http://" + m_ip + ":1234/robot_data_stream";
     std::string response = sendGetRequest(url, 60); // 机器人数据流可能需要更长时间
     
     if (response.empty()) {

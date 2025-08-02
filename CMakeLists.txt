@@ -102,11 +102,15 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
+# 启用测试编译
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_gmock REQUIRED)
   ament_lint_auto_find_test_dependencies()
+  
+  # 包含测试目录的CMakeLists.txt
+  add_subdirectory(test)
   
   # 添加SDK测试
   ament_add_gtest(test_tbot_sdk test/test_tbot_sdk.cpp)

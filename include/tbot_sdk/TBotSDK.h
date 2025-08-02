@@ -151,7 +151,7 @@ public:
     
     // 地图编辑
     bool getEditedMapData(const std::string& mapName, std::vector<int>& path, std::vector<int>& wall, StatusCallback callback = nullptr);
-    bool saveEditedMap(const std::string& mapName, const std::vector<int>& path, std::vector<int>& wall, StatusCallback callback = nullptr);
+    bool saveEditedMap(const std::string& mapName, const std::vector<int>& path, const std::vector<int>& wall, StatusCallback callback = nullptr);
     
     // 位置点管理
     bool saveWaypoint(const std::string& name, const Pose& pose, const std::string& description = "", const std::string& mapName = "", StatusCallback callback = nullptr);

@@ -1,12 +1,61 @@
 # TBot SDK 测试和使用指南
 
 ## 目录
-1. [编译和安装](#编译和安装)
-2. [单元测试](#单元测试)
-3. [集成测试](#集成测试)
-4. [功能测试](#功能测试)
-5. [性能测试](#性能测试)
-6. [故障排除](#故障排除)
+1. [测试结构概述](#测试结构概述)
+2. [编译和安装](#编译和安装)
+3. [静态功能测试](#静态功能测试)
+4. [动态功能测试](#动态功能测试)
+5. [测试运行方法](#测试运行方法)
+6. [性能测试](#性能测试)
+7. [故障排除](#故障排除)
+
+## 测试结构概述
+
+### 重新组织的测试结构
+
+根据功能分类，测试文件已重新组织为两大类，统一放在 `test` 目录下：
+
+#### 📁 目录结构
+```
+test/
+├── static/                    # 静态功能测试
+│   ├── test_connection.cpp    # 连接状态测试
+│   ├── test_data_stream.cpp  # 数据流测试
+│   ├── test_robot_status.cpp # 机器人状态测试
+│   └── test_map_status.cpp   # 地图状态测试
+├── dynamic/                   # 动态功能测试
+│   ├── test_navigation.cpp   # 导航功能测试
+│   ├── test_velocity_control.cpp # 速度控制测试
+│   └── test_waypoints.cpp    # 位置点管理测试
+├── CMakeLists.txt            # 测试编译配置
+├── run_all_tests.sh          # 运行所有测试脚本
+├── run_static_tests.sh       # 运行静态测试脚本
+├── run_dynamic_tests.sh      # 运行动态测试脚本
+├── README.md                 # 测试说明文档
+└── TEST_STRUCTURE.md         # 测试结构总结
+```
+
+#### 🔧 功能分类
+
+**静态功能测试** (`static/`)
+- 数据收集和状态监控功能
+- 不涉及机器人的实际运动
+- 使用Mock对象进行单元测试
+
+**动态功能测试** (`dynamic/`)
+- 机器人的运动控制和导航功能
+- 测试速度控制、导航、位置点管理等
+- 使用Mock对象模拟实际行为
+
+#### ⚠️ 排除功能
+- **建图功能**: 由上位机处理，不包含在SDK测试中
+
+#### 🎯 测试特性
+- **Mock测试**: 使用Google Mock框架，无需实际硬件
+- **全面覆盖**: 覆盖SDK的所有主要功能
+- **中文支持**: 测试用例支持中文位置点名称
+- **异步回调**: 测试异步操作和回调机制
+- **错误处理**: 包含各种错误场景的测试
 
 ## 编译和安装
 
@@ -38,6 +87,11 @@ sudo apt-get install -y \
     ros-humble-ament-cmake \
     ros-humble-ament-cmake-gtest \
     ros-humble-ament-cmake-gmock
+
+# 安装Google Test和Google Mock
+sudo apt-get install -y \
+    libgtest-dev \
+    libgmock-dev
 ```
 
 ### 2. 编译项目
@@ -55,39 +109,200 @@ cd tbot_sdk
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
 
-# 编译
-colcon build --packages-select tbot_sdk
+# 编译（包含测试）
+colcon build --packages-select tbot_sdk --cmake-args -DBUILD_TESTING=ON
 
 # 设置环境
 source install/setup.bash
 ```
 
-## 单元测试
+## 静态功能测试
 
-### 1. 运行SDK单元测试
+### 1. 连接状态测试 (`test_connection.cpp`)
+
+测试机器人的连接相关功能：
 
 ```bash
 # 编译测试
-colcon build --packages-select tbot_sdk --cmake-args -DBUILD_TESTING=ON
+cd test
+mkdir -p build && cd build
+cmake ..
+make test_connection
 
-# 运行SDK测试
+# 运行连接测试
+./test_connection
+```
+
+**测试内容**:
+- 连接成功/失败场景
+- 连接状态检查
+- 服务状态检查
+- 断开连接功能
+- 参数验证（无效IP等）
+
+### 2. 数据流测试 (`test_data_stream.cpp`)
+
+测试机器人数据和地图数据流：
+
+```bash
+# 运行数据流测试
+./test_data_stream
+```
+
+**测试内容**:
+- 机器人数据流获取
+- 地图数据流获取
+- 数据内容验证
+- 连续数据接收
+- 错误处理
+
+### 3. 机器人状态测试 (`test_robot_status.cpp`)
+
+测试各种机器人状态信息：
+
+```bash
+# 运行机器人状态测试
+./test_robot_status
+```
+
+**测试内容**:
+- 获取机器人状态
+- 获取电池状态
+- 获取系统状态
+- 状态数据验证
+- 边界条件测试
+
+### 4. 地图状态测试 (`test_map_status.cpp`)
+
+测试地图相关的状态和信息：
+
+```bash
+# 运行地图状态测试
+./test_map_status
+```
+
+**测试内容**:
+- 获取地图列表
+- 获取当前地图
+- 获取地图状态
+- 地图内容验证
+- 地图分辨率检查
+
+## 动态功能测试
+
+### 1. 导航功能测试 (`test_navigation.cpp`)
+
+测试机器人的导航能力：
+
+```bash
+# 运行导航测试
+./test_navigation
+```
+
+**测试内容**:
+- 启动导航
+- 导航到指定坐标
+- 同步导航等待
+- 停止导航
+- 暂停/恢复导航
+- 导航参数验证
+
+### 2. 速度控制测试 (`test_velocity_control.cpp`)
+
+测试速度控制功能：
+
+```bash
+# 运行速度控制测试
+./test_velocity_control
+```
+
+**测试内容**:
+- 速度控制命令
+- 设置最大速度
+- 停止命令
+- 急停功能
+- 各种运动模式
+- 速度限制验证
+
+### 3. 位置点管理测试 (`test_waypoints.cpp`)
+
+测试位置点管理功能：
+
+```bash
+# 运行位置点测试
+./test_waypoints
+```
+
+**测试内容**:
+- 保存当前位置点
+- 加载位置点信息
+- 获取所有位置点
+- 导航到位置点
+- 删除位置点
+- 中文位置点名称支持
+
+## 测试运行方法
+
+### 1. 运行所有测试
+
+```bash
+# 使用测试脚本运行所有测试
+chmod +x test/run_all_tests.sh
+./test/run_all_tests.sh
+```
+
+### 2. 运行分类测试
+
+```bash
+# 只运行静态功能测试
+chmod +x test/run_static_tests.sh
+./test/run_static_tests.sh
+
+# 只运行动态功能测试
+chmod +x test/run_dynamic_tests.sh
+./test/run_dynamic_tests.sh
+```
+
+### 3. 运行单个测试
+
+```bash
+# 进入build目录
+cd build
+
+# 运行连接测试
+./test/test_connection
+
+# 运行导航测试
+./test/test_navigation
+
+# 运行数据流测试
+./test/test_data_stream
+
+# 运行机器人状态测试
+./test/test_robot_status
+
+# 运行地图状态测试
+./test/test_map_status
+
+# 运行速度控制测试
+./test/test_velocity_control
+
+# 运行位置点测试
+./test/test_waypoints
+```
+
+### 4. 使用ROS2测试框架
+
+```bash
+# 编译并运行ROS2测试
+colcon build --packages-select tbot_sdk --cmake-args -DBUILD_TESTING=ON
 colcon test --packages-select tbot_sdk --event-handlers console_direct+
 
 # 查看测试结果
 colcon test-result --all
 ```
 
-### 2. 运行节点单元测试
-
-```bash
-# 运行节点测试
-ros2 run tbot_sdk test_tbot_node
-
-# 或者直接运行
-./build/tbot_sdk/test_tbot_node
-```
-
-### 3. 测试覆盖率
+### 5. 测试覆盖率
 
 ```bash
 # 安装覆盖率工具
@@ -99,85 +314,6 @@ colcon build --packages-select tbot_sdk --cmake-args -DBUILD_TESTING=ON -DCMAKE_
 # 运行测试并生成覆盖率报告
 lcov --capture --directory build/tbot_sdk --output-file coverage.info
 genhtml coverage.info --output-directory coverage_report
-```
-
-## 集成测试
-
-### 1. 运行Python集成测试
-
-```bash
-# 运行集成测试
-python3 test/integration_test.py
-
-# 或者使用unittest
-python3 -m unittest test.integration_test -v
-```
-
-### 2. 手动集成测试
-
-```bash
-# 终端1：启动TBot节点
-ros2 launch tbot_sdk tbot_launch.py robot_ip:=192.168.8.110
-
-# 终端2：测试速度控制
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.2}}"
-
-# 终端3：测试导航目标
-ros2 topic pub /goal_pose geometry_msgs/msg/PoseStamped "{header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'map'}, pose: {position: {x: 1.0, y: 2.0, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}"
-
-# 终端4：查看发布的话题
-ros2 topic list
-ros2 topic echo /odom
-ros2 topic echo /scan
-ros2 topic echo /status
-```
-
-## 功能测试
-
-### 1. 基本功能测试
-
-```bash
-# 测试连接功能
-ros2 run tbot_sdk test_api
-
-# 测试参数设置
-ros2 param set /tbot_node robot_ip 192.168.8.110
-ros2 param get /tbot_node robot_ip
-
-# 测试话题发布和订阅
-ros2 topic info /cmd_vel
-ros2 topic info /odom
-ros2 topic info /scan
-```
-
-### 2. 机器人控制测试
-
-```bash
-# 测试速度控制
-for i in {1..5}; do
-    ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.3, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.1}}" --once
-    sleep 1
-done
-
-# 测试停止
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}" --once
-```
-
-### 3. 导航功能测试
-
-```bash
-# 测试导航到不同位置
-positions=(
-    "1.0 2.0 0.0 1.0"
-    "3.0 1.0 0.0 0.7"
-    "0.0 0.0 0.0 1.0"
-)
-
-for pos in "${positions[@]}"; do
-    read -r x y z w <<< "$pos"
-    ros2 topic pub /goal_pose geometry_msgs/msg/PoseStamped "{header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'map'}, pose: {position: {x: $x, y: $y, z: $z}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: $w}}}" --once
-    sleep 5
-done
 ```
 
 ## 性能测试
@@ -228,13 +364,13 @@ echo "Starting TBot SDK tests..."
 # 编译测试
 colcon build --packages-select tbot_sdk --cmake-args -DBUILD_TESTING=ON
 
-# 运行单元测试
-echo "Running unit tests..."
-colcon test --packages-select tbot_sdk --event-handlers console_direct+
+# 运行静态测试
+echo "Running static tests..."
+./test/run_static_tests.sh
 
-# 运行集成测试
-echo "Running integration tests..."
-python3 test/integration_test.py
+# 运行动态测试
+echo "Running dynamic tests..."
+./test/run_dynamic_tests.sh
 
 # 显示测试结果
 echo "Test results:"
@@ -260,6 +396,9 @@ sudo apt-get install libcurl4-openssl-dev
 
 # 错误：找不到JSON库
 sudo apt-get install libjsoncpp-dev
+
+# 错误：找不到Google Test
+sudo apt-get install libgtest-dev libgmock-dev
 
 # 错误：找不到ROS2包
 sudo apt-get install ros-humble-ament-cmake-gtest
@@ -288,10 +427,10 @@ ros2 topic list
 colcon test --packages-select tbot_sdk --event-handlers console_direct+ --verbose
 
 # 运行单个测试
-./build/tbot_sdk/test_tbot_sdk --gtest_filter=TestConnect
+./build/tbot_sdk/test_connection --gtest_filter=ConnectionTest.TestConnectSuccess
 
 # 调试模式运行
-gdb ./build/tbot_sdk/test_tbot_sdk
+gdb ./build/tbot_sdk/test_connection
 ```
 
 ### 4. 性能问题
@@ -332,26 +471,29 @@ jobs:
           build-essential \
           cmake \
           libcurl4-openssl-dev \
-          libjsoncpp-dev
+          libjsoncpp-dev \
+          libgtest-dev \
+          libgmock-dev
     
     - name: Install ROS2
       run: |
         sudo apt-get install -y \
-          ros-foxy-rclcpp \
-          ros-foxy-std-msgs \
-          ros-foxy-geometry-msgs \
-          ros-foxy-sensor-msgs \
-          ros-foxy-nav-msgs \
-          ros-foxy-tf2 \
-          ros-foxy-tf2-ros \
-          ros-foxy-ament-cmake \
-          ros-foxy-ament-cmake-gtest
+          ros-humble-rclcpp \
+          ros-humble-std-msgs \
+          ros-humble-geometry-msgs \
+          ros-humble-sensor-msgs \
+          ros-humble-nav-msgs \
+          ros-humble-tf2 \
+          ros-humble-tf2-ros \
+          ros-humble-ament-cmake \
+          ros-humble-ament-cmake-gtest \
+          ros-humble-ament-cmake-gmock
     
     - name: Build and test
       run: |
-        source /opt/ros/foxy/setup.sh
+        source /opt/ros/humble/setup.sh
         colcon build --packages-select tbot_sdk --cmake-args -DBUILD_TESTING=ON
-        colcon test --packages-select tbot_sdk --event-handlers console_direct+
+        ./test/run_all_tests.sh
         colcon test-result --all
 ```
 
@@ -371,7 +513,7 @@ colcon build --packages-select tbot_sdk --cmake-args -DBUILD_TESTING=ON
 
 # 运行测试
 echo "Running tests..."
-colcon test --packages-select tbot_sdk --event-handlers console_direct+
+./test/run_all_tests.sh
 
 # 检查测试结果
 echo "Checking test results..."
@@ -399,4 +541,7 @@ echo "CI pipeline completed!"
 2. **持续测试**: 每次提交都运行测试
 3. **覆盖率目标**: 保持至少80%的代码覆盖率
 4. **性能监控**: 定期检查性能指标
-5. **文档更新**: 测试用例也是文档的一部分 
+5. **文档更新**: 测试用例也是文档的一部分
+6. **Mock测试**: 使用Mock对象确保测试的独立性
+7. **分类测试**: 按功能分类组织测试文件
+8. **自动化**: 使用脚本自动化测试流程 

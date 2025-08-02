@@ -7,6 +7,7 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Matrix3x3.h>
 #include <memory>
 #include <string>
 
@@ -45,11 +46,11 @@ public:
         if (!tbot_->connect([this](int code, const std::string& message) {
             RCLCPP_INFO(this->get_logger(), "TBot Status: %d - %s", code, message.c_str());
         })) {
-            RCLCPP_ERROR(this->get_logger(), "Failed to connect to TBot");
-            return;
+            RCLCPP_WARN(this->get_logger(), "Failed to connect to TBot, but node will continue running");
+            RCLCPP_INFO(this->get_logger(), "Node will publish empty data until connection is established");
+        } else {
+            RCLCPP_INFO(this->get_logger(), "TBot node initialized successfully");
         }
-        
-        RCLCPP_INFO(this->get_logger(), "TBot node initialized successfully");
     }
     
     ~TBotNode()
@@ -105,6 +106,8 @@ private:
     void timerCallback()
     {
         if (!tbot_ || !tbot_->isConnected()) {
+            // 即使没有连接，也发布空数据以保持话题活跃
+            publishEmptyData();
             return;
         }
         
@@ -163,6 +166,27 @@ private:
                             "%, Status: " + robotData.system_status;
             status_pub_->publish(status_msg);
         });
+    }
+    
+    void publishEmptyData() {
+        // 发布空的里程计数据
+        auto odom_msg = nav_msgs::msg::Odometry();
+        odom_msg.header.stamp = this->now();
+        odom_msg.header.frame_id = "odom";
+        odom_msg.child_frame_id = "base_link";
+        odom_pub_->publish(odom_msg);
+        
+        // 发布空的TF变换
+        geometry_msgs::msg::TransformStamped transform;
+        transform.header.stamp = this->now();
+        transform.header.frame_id = "odom";
+        transform.child_frame_id = "base_link";
+        tf_broadcaster_->sendTransform(transform);
+        
+        // 发布连接状态信息
+        auto status_msg = std_msgs::msg::String();
+        status_msg.data = "Status: disconnected";
+        status_pub_->publish(status_msg);
     }
     
     std::unique_ptr<TBot::TBotSDK> tbot_;
