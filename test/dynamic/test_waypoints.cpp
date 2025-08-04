@@ -1,319 +1,275 @@
 #include <gtest/gtest.h>
-#include <gmock/gmock.h>
 #include "tbot_sdk/TBotSDK.h"
 #include <memory>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 using namespace TBot;
-using ::testing::_;
-using ::testing::Return;
-using ::testing::StrictMock;
 
-// Mock类用于测试导航点功能
-class MockTBotSDK : public TBotSDK {
-public:
-    MockTBotSDK(const std::string& ip = "192.168.8.110") : TBotSDK(ip) {}
-    
-    MOCK_METHOD(bool, saveCurrentPositionAsWaypoint, (const std::string& name, const std::string& description, StatusCallback callback), (override));
-    MOCK_METHOD(bool, loadWaypoint, (const std::string& name, WaypointCallback callback), (override));
-    MOCK_METHOD(std::vector<Waypoint>, getAllWaypoints, (const std::string& filter, StatusCallback callback), (override));
-    MOCK_METHOD(bool, navigateToWaypoint, (const std::string& name, StatusCallback callback), (override));
-    MOCK_METHOD(bool, navigateToWaypointAndWait, (const std::string& name, int timeout, StatusCallback callback), (override));
-    MOCK_METHOD(bool, deleteWaypoint, (const std::string& name, StatusCallback callback), (override));
-};
-
-class WaypointsTest : public ::testing::Test {
+class RealWaypointsTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        mock_tbot_ = std::make_unique<StrictMock<MockTBotSDK>>("192.168.8.110");
+        tbot_ = std::make_unique<TBotSDK>("192.168.8.110");
+        tbot_->connect();
     }
     
     void TearDown() override {
-        mock_tbot_.reset();
+        if (tbot_->isConnected()) {
+            tbot_->disconnect();
+        }
+        tbot_.reset();
     }
     
-    std::unique_ptr<StrictMock<MockTBotSDK>> mock_tbot_;
+    std::unique_ptr<TBotSDK> tbot_;
 };
 
-// 测试保存当前位置作为导航点
-TEST_F(WaypointsTest, TestSaveCurrentPositionAsWaypoint) {
-    EXPECT_CALL(*mock_tbot_, saveCurrentPositionAsWaypoint("A点", "起始位置", _))
-        .WillOnce(Return(true));
-    
-    bool result = mock_tbot_->saveCurrentPositionAsWaypoint("A点", "起始位置", [](int code, const std::string& message) {
-        EXPECT_EQ(code, 0);
-        EXPECT_EQ(message, "Waypoint saved successfully");
-    });
-    
+// 测试保存路径点
+TEST_F(RealWaypointsTest, TestSaveWaypoint) {
+    // 保存一个测试路径点
+    bool result = tbot_->saveWaypoint("test_waypoint", {1.0f, 2.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, "Test waypoint description");
     EXPECT_TRUE(result);
+    
+    std::cout << "Waypoint 'test_waypoint' saved" << std::endl;
 }
 
-// 测试加载导航点
-TEST_F(WaypointsTest, TestLoadWaypoint) {
-    EXPECT_CALL(*mock_tbot_, loadWaypoint("A点", _))
-        .WillOnce(Return(true));
-    
-    bool result = mock_tbot_->loadWaypoint("A点", [](const Waypoint& waypoint) {
-        EXPECT_EQ(waypoint.name, "A点");
-        EXPECT_EQ(waypoint.description, "起始位置");
-        EXPECT_FLOAT_EQ(waypoint.pose.position.x, 1.0);
-        EXPECT_FLOAT_EQ(waypoint.pose.position.y, 2.0);
-        EXPECT_FLOAT_EQ(waypoint.pose.position.z, 0.0);
-        EXPECT_FLOAT_EQ(waypoint.pose.orientation.w, 1.0);
-    });
-    
+// 测试保存当前位置为路径点
+TEST_F(RealWaypointsTest, TestSaveCurrentPositionAsWaypoint) {
+    // 保存当前位置为路径点
+    bool result = tbot_->saveCurrentPositionAsWaypoint("current_position", "Current robot position");
     EXPECT_TRUE(result);
+    
+    std::cout << "Current position saved as waypoint" << std::endl;
 }
 
-// 测试获取所有导航点
-TEST_F(WaypointsTest, TestGetAllWaypoints) {
-    std::vector<Waypoint> expected_waypoints;
-    Waypoint wp1, wp2;
-    wp1.name = "A点";
-    wp1.description = "起始位置";
-    wp1.pose.position.x = 1.0;
-    wp1.pose.position.y = 2.0;
-    wp2.name = "B点";
-    wp2.description = "中间位置";
-    wp2.pose.position.x = 3.0;
-    wp2.pose.position.y = 4.0;
-    expected_waypoints.push_back(wp1);
-    expected_waypoints.push_back(wp2);
+// 测试加载路径点
+TEST_F(RealWaypointsTest, TestLoadWaypoint) {
+    bool callback_called = false;
     
-    EXPECT_CALL(*mock_tbot_, getAllWaypoints("", _))
-        .WillOnce(Return(expected_waypoints));
-    
-    auto waypoints = mock_tbot_->getAllWaypoints("", [](int code, const std::string& message) {
-        EXPECT_EQ(code, 0);
-        EXPECT_EQ(message, "Success");
-    });
-    
-    EXPECT_EQ(waypoints.size(), 2);
-    EXPECT_EQ(waypoints[0].name, "A点");
-    EXPECT_EQ(waypoints[1].name, "B点");
-}
-
-// 测试导航到导航点
-TEST_F(WaypointsTest, TestNavigateToWaypoint) {
-    EXPECT_CALL(*mock_tbot_, navigateToWaypoint("A点", _))
-        .WillOnce(Return(true));
-    
-    bool result = mock_tbot_->navigateToWaypoint("A点", [](int code, const std::string& message) {
-        EXPECT_EQ(code, 0);
-        EXPECT_EQ(message, "Navigation to waypoint started");
-    });
-    
-    EXPECT_TRUE(result);
-}
-
-// 测试同步导航到导航点
-TEST_F(WaypointsTest, TestNavigateToWaypointAndWait) {
-    EXPECT_CALL(*mock_tbot_, navigateToWaypointAndWait("B点", 30, _))
-        .WillOnce(Return(true));
-    
-    bool result = mock_tbot_->navigateToWaypointAndWait("B点", 30, [](int code, const std::string& message) {
-        EXPECT_EQ(code, 0);
-        EXPECT_EQ(message, "Navigation to waypoint completed");
-    });
-    
-    EXPECT_TRUE(result);
-}
-
-// 测试删除导航点
-TEST_F(WaypointsTest, TestDeleteWaypoint) {
-    EXPECT_CALL(*mock_tbot_, deleteWaypoint("C点", _))
-        .WillOnce(Return(true));
-    
-    bool result = mock_tbot_->deleteWaypoint("C点", [](int code, const std::string& message) {
-        EXPECT_EQ(code, 0);
-        EXPECT_EQ(message, "Waypoint deleted successfully");
-    });
-    
-    EXPECT_TRUE(result);
-}
-
-// 测试保存导航点失败
-TEST_F(WaypointsTest, TestSaveCurrentPositionAsWaypointFailure) {
-    EXPECT_CALL(*mock_tbot_, saveCurrentPositionAsWaypoint("", "", _))
-        .WillOnce(Return(false));
-    
-    bool result = mock_tbot_->saveCurrentPositionAsWaypoint("", "", [](int code, const std::string& message) {
-        EXPECT_EQ(code, -1);
-        EXPECT_EQ(message, "Failed to save waypoint");
-    });
-    
-    EXPECT_FALSE(result);
-}
-
-// 测试加载导航点失败
-TEST_F(WaypointsTest, TestLoadWaypointFailure) {
-    EXPECT_CALL(*mock_tbot_, loadWaypoint("不存在的点", _))
-        .WillOnce(Return(false));
-    
-    bool result = mock_tbot_->loadWaypoint("不存在的点", [](const Waypoint& waypoint) {
-        // 这个回调不应该被调用
-        FAIL() << "Waypoint callback should not be called";
-    });
-    
-    EXPECT_FALSE(result);
-}
-
-// 测试导航到导航点失败
-TEST_F(WaypointsTest, TestNavigateToWaypointFailure) {
-    EXPECT_CALL(*mock_tbot_, navigateToWaypoint("不存在的点", _))
-        .WillOnce(Return(false));
-    
-    bool result = mock_tbot_->navigateToWaypoint("不存在的点", [](int code, const std::string& message) {
-        EXPECT_EQ(code, -1);
-        EXPECT_EQ(message, "Waypoint not found");
-    });
-    
-    EXPECT_FALSE(result);
-}
-
-// 测试同步导航到导航点超时
-TEST_F(WaypointsTest, TestNavigateToWaypointAndWaitTimeout) {
-    EXPECT_CALL(*mock_tbot_, navigateToWaypointAndWait("远点", 5, _))
-        .WillOnce(Return(false));
-    
-    bool result = mock_tbot_->navigateToWaypointAndWait("远点", 5, [](int code, const std::string& message) {
-        EXPECT_EQ(code, -1);
-        EXPECT_EQ(message, "Navigation timeout");
-    });
-    
-    EXPECT_FALSE(result);
-}
-
-// 测试导航点内容验证
-TEST_F(WaypointsTest, TestWaypointContent) {
-    Waypoint testWaypoint;
-    testWaypoint.name = "测试点";
-    testWaypoint.description = "测试描述";
-    testWaypoint.pose.position.x = 5.0;
-    testWaypoint.pose.position.y = 3.0;
-    testWaypoint.pose.position.z = 0.0;
-    testWaypoint.pose.orientation.x = 0.0;
-    testWaypoint.pose.orientation.y = 0.0;
-    testWaypoint.pose.orientation.z = 0.707;
-    testWaypoint.pose.orientation.w = 0.707;
-    testWaypoint.created_time = "2024-01-01 12:00:00";
-    
-    EXPECT_EQ(testWaypoint.name, "测试点");
-    EXPECT_EQ(testWaypoint.description, "测试描述");
-    EXPECT_FLOAT_EQ(testWaypoint.pose.position.x, 5.0);
-    EXPECT_FLOAT_EQ(testWaypoint.pose.position.y, 3.0);
-    EXPECT_FLOAT_EQ(testWaypoint.pose.position.z, 0.0);
-    EXPECT_FLOAT_EQ(testWaypoint.pose.orientation.z, 0.707);
-    EXPECT_FLOAT_EQ(testWaypoint.pose.orientation.w, 0.707);
-    EXPECT_EQ(testWaypoint.created_time, "2024-01-01 12:00:00");
-}
-
-// 测试导航点名称验证
-TEST_F(WaypointsTest, TestWaypointNameValidation) {
-    // 测试有效名称
-    std::vector<std::string> valid_names = {
-        "A点", "B点", "C点", "起始位置", "终点位置", "充电桩", "工作台1", "工作台2"
-    };
-    
-    for (const auto& name : valid_names) {
-        EXPECT_FALSE(name.empty());
-        EXPECT_LE(name.length(), 50);
-    }
-    
-    // 测试无效名称
-    std::vector<std::string> invalid_names = {
-        "", "   ", "非常非常非常非常非常非常非常非常非常非常长的名称"
-    };
-    
-    for (const auto& name : invalid_names) {
-        EXPECT_TRUE(name.empty() || name.length() > 50);
-    }
-}
-
-// 测试导航点坐标验证
-TEST_F(WaypointsTest, TestWaypointCoordinateValidation) {
-    // 测试有效坐标
-    std::vector<std::tuple<float, float, float>> valid_coords = {
-        {0.0f, 0.0f, 0.0f},
-        {1.0f, 2.0f, 0.0f},
-        {-5.0f, -3.0f, 0.0f},
-        {10.0f, 15.0f, 0.0f}
-    };
-    
-    for (const auto& coords : valid_coords) {
-        float x, y, z;
-        std::tie(x, y, z) = coords;
+    bool result = tbot_->loadWaypoint("test_waypoint", [&callback_called](const Waypoint& waypoint) {
+        callback_called = true;
         
-        EXPECT_GE(x, -100.0f);
-        EXPECT_LE(x, 100.0f);
-        EXPECT_GE(y, -100.0f);
-        EXPECT_LE(y, 100.0f);
-        EXPECT_FLOAT_EQ(z, 0.0f);
+        // 验证路径点信息
+        EXPECT_EQ(waypoint.name, "test_waypoint");
+        EXPECT_FINITE(waypoint.pose.position.x);
+        EXPECT_FINITE(waypoint.pose.position.y);
+        EXPECT_FINITE(waypoint.pose.position.z);
+        EXPECT_FINITE(waypoint.pose.orientation.x);
+        EXPECT_FINITE(waypoint.pose.orientation.y);
+        EXPECT_FINITE(waypoint.pose.orientation.z);
+        EXPECT_FINITE(waypoint.pose.orientation.w);
+        
+        std::cout << "Loaded waypoint: " << waypoint.name << std::endl;
+        std::cout << "Position: (" << waypoint.pose.position.x << ", " 
+                  << waypoint.pose.position.y << ", " << waypoint.pose.position.z << ")" << std::endl;
+    });
+    
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(callback_called);
+}
+
+// 测试获取所有路径点
+TEST_F(RealWaypointsTest, TestGetAllWaypoints) {
+    auto waypoints = tbot_->getAllWaypoints();
+    
+    // 验证路径点列表
+    EXPECT_GE(waypoints.size(), 0);
+    
+    std::cout << "Found " << waypoints.size() << " waypoints:" << std::endl;
+    for (const auto& waypoint : waypoints) {
+        EXPECT_FALSE(waypoint.name.empty());
+        EXPECT_FINITE(waypoint.pose.position.x);
+        EXPECT_FINITE(waypoint.pose.position.y);
+        EXPECT_FINITE(waypoint.pose.position.z);
+        
+        std::cout << "  - " << waypoint.name << " at (" 
+                  << waypoint.pose.position.x << ", " 
+                  << waypoint.pose.position.y << ", " 
+                  << waypoint.pose.position.z << ")" << std::endl;
     }
 }
 
-// 测试导航点操作流程
-TEST_F(WaypointsTest, TestWaypointOperations) {
-    // 1. 保存导航点
-    EXPECT_CALL(*mock_tbot_, saveCurrentPositionAsWaypoint("测试点", "测试描述", _))
-        .WillOnce(Return(true));
+// 测试导航到路径点
+TEST_F(RealWaypointsTest, TestNavigateToWaypoint) {
+    // 先获取所有路径点
+    auto waypoints = tbot_->getAllWaypoints();
     
-    bool saved = mock_tbot_->saveCurrentPositionAsWaypoint("测试点", "测试描述", [](int code, const std::string& message) {
-        EXPECT_EQ(code, 0);
-    });
-    EXPECT_TRUE(saved);
-    
-    // 2. 加载导航点
-    EXPECT_CALL(*mock_tbot_, loadWaypoint("测试点", _))
-        .WillOnce(Return(true));
-    
-    bool loaded = mock_tbot_->loadWaypoint("测试点", [](const Waypoint& waypoint) {
-        EXPECT_EQ(waypoint.name, "测试点");
-    });
-    EXPECT_TRUE(loaded);
-    
-    // 3. 导航到导航点
-    EXPECT_CALL(*mock_tbot_, navigateToWaypoint("测试点", _))
-        .WillOnce(Return(true));
-    
-    bool navigated = mock_tbot_->navigateToWaypoint("测试点", [](int code, const std::string& message) {
-        EXPECT_EQ(code, 0);
-    });
-    EXPECT_TRUE(navigated);
-    
-    // 4. 删除导航点
-    EXPECT_CALL(*mock_tbot_, deleteWaypoint("测试点", _))
-        .WillOnce(Return(true));
-    
-    bool deleted = mock_tbot_->deleteWaypoint("测试点", [](int code, const std::string& message) {
-        EXPECT_EQ(code, 0);
-    });
-    EXPECT_TRUE(deleted);
+    if (!waypoints.empty()) {
+        // 导航到第一个路径点
+        bool result = tbot_->navigateToWaypoint(waypoints[0].name);
+        EXPECT_TRUE(result);
+        
+        std::cout << "Navigating to waypoint: " << waypoints[0].name << std::endl;
+        
+        // 等待导航开始
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        
+        if (tbot_->isNavigating()) {
+            // 等待一段时间让导航进行
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            
+            // 停止导航
+            tbot_->stopNavigation();
+        }
+    }
 }
 
-// 测试导航点过滤功能
-TEST_F(WaypointsTest, TestWaypointFiltering) {
-    std::vector<Waypoint> all_waypoints;
-    Waypoint wp1, wp2, wp3;
-    wp1.name = "A点";
-    wp1.description = "起始位置";
-    wp2.name = "B点";
-    wp2.description = "中间位置";
-    wp3.name = "充电桩";
-    wp3.description = "充电位置";
-    all_waypoints.push_back(wp1);
-    all_waypoints.push_back(wp2);
-    all_waypoints.push_back(wp3);
+// 测试同步导航到路径点
+TEST_F(RealWaypointsTest, TestNavigateToWaypointAndWait) {
+    auto waypoints = tbot_->getAllWaypoints();
     
-    EXPECT_CALL(*mock_tbot_, getAllWaypoints("点", _))
-        .WillOnce(Return(all_waypoints));
+    if (!waypoints.empty()) {
+        // 同步导航到路径点，设置较短的超时时间
+        bool result = tbot_->navigateToWaypointAndWait(waypoints[0].name, 10);
+        EXPECT_TRUE(result);
+        
+        std::cout << "Navigation to waypoint completed or timed out" << std::endl;
+    }
+}
+
+// 测试删除路径点
+TEST_F(RealWaypointsTest, TestDeleteWaypoint) {
+    // 先保存一个临时路径点
+    tbot_->saveWaypoint("temp_waypoint", {0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, "Temporary waypoint");
     
-    auto filtered_waypoints = mock_tbot_->getAllWaypoints("点", [](int code, const std::string& message) {
-        EXPECT_EQ(code, 0);
+    // 删除这个路径点
+    bool result = tbot_->deleteWaypoint("temp_waypoint");
+    EXPECT_TRUE(result);
+    
+    std::cout << "Temporary waypoint deleted" << std::endl;
+}
+
+// 测试路径点内容验证
+TEST_F(RealWaypointsTest, TestWaypointContent) {
+    // 保存一个测试路径点
+    tbot_->saveWaypoint("content_test", {3.0f, 4.0f, 0.0f}, {0.0f, 0.0f, 0.707f, 0.707f}, "Content test waypoint");
+    
+    // 加载并验证路径点内容
+    tbot_->loadWaypoint("content_test", [](const Waypoint& waypoint) {
+        EXPECT_EQ(waypoint.name, "content_test");
+        EXPECT_NEAR(waypoint.pose.position.x, 3.0f, 0.1f);
+        EXPECT_NEAR(waypoint.pose.position.y, 4.0f, 0.1f);
+        EXPECT_NEAR(waypoint.pose.position.z, 0.0f, 0.1f);
+        EXPECT_NEAR(waypoint.pose.orientation.x, 0.0f, 0.1f);
+        EXPECT_NEAR(waypoint.pose.orientation.y, 0.0f, 0.1f);
+        EXPECT_NEAR(waypoint.pose.orientation.z, 0.707f, 0.1f);
+        EXPECT_NEAR(waypoint.pose.orientation.w, 0.707f, 0.1f);
+        EXPECT_EQ(waypoint.description, "Content test waypoint");
+        
+        // 验证四元数归一化
+        float quaternion_norm = waypoint.pose.orientation.x * waypoint.pose.orientation.x +
+                               waypoint.pose.orientation.y * waypoint.pose.orientation.y +
+                               waypoint.pose.orientation.z * waypoint.pose.orientation.z +
+                               waypoint.pose.orientation.w * waypoint.pose.orientation.w;
+        EXPECT_NEAR(quaternion_norm, 1.0f, 0.1f);
     });
     
-    EXPECT_EQ(filtered_waypoints.size(), 3);
+    // 清理测试路径点
+    tbot_->deleteWaypoint("content_test");
+}
+
+// 测试路径点参数验证
+TEST_F(RealWaypointsTest, TestWaypointParameterValidation) {
+    // 测试无效路径点名称
+    bool result = tbot_->loadWaypoint("", [](const Waypoint& waypoint) {
+        FAIL() << "Should not load empty waypoint name";
+    });
+    EXPECT_FALSE(result);
+    
+    // 测试删除不存在的路径点
+    bool delete_result = tbot_->deleteWaypoint("non_existent_waypoint");
+    EXPECT_FALSE(delete_result);
+    
+    // 测试导航到不存在的路径点
+    bool nav_result = tbot_->navigateToWaypoint("non_existent_waypoint");
+    EXPECT_FALSE(nav_result);
+}
+
+// 测试路径点边界条件
+TEST_F(RealWaypointsTest, TestWaypointBoundaryConditions) {
+    // 测试保存路径点时的边界值
+    bool result = tbot_->saveWaypoint("boundary_test", {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, "");
+    EXPECT_TRUE(result);
+    
+    // 测试保存路径点时的最大距离
+    bool far_result = tbot_->saveWaypoint("far_waypoint", {100.0f, 100.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, "Far waypoint");
+    EXPECT_TRUE(far_result);
+    
+    // 清理测试路径点
+    tbot_->deleteWaypoint("boundary_test");
+    tbot_->deleteWaypoint("far_waypoint");
+}
+
+// 测试路径点精度验证
+TEST_F(RealWaypointsTest, TestWaypointPrecision) {
+    // 保存一个精确的路径点
+    tbot_->saveWaypoint("precision_test", {1.234f, 2.345f, 0.0f}, {0.1f, 0.2f, 0.3f, 0.9f}, "Precision test");
+    
+    // 验证保存的精度
+    tbot_->loadWaypoint("precision_test", [](const Waypoint& waypoint) {
+        EXPECT_NEAR(waypoint.pose.position.x, 1.234f, 0.01f);
+        EXPECT_NEAR(waypoint.pose.position.y, 2.345f, 0.01f);
+        EXPECT_NEAR(waypoint.pose.position.z, 0.0f, 0.01f);
+        
+        // 验证四元数归一化
+        float quaternion_norm = waypoint.pose.orientation.x * waypoint.pose.orientation.x +
+                               waypoint.pose.orientation.y * waypoint.pose.orientation.y +
+                               waypoint.pose.orientation.z * waypoint.pose.orientation.z +
+                               waypoint.pose.orientation.w * waypoint.pose.orientation.w;
+        EXPECT_NEAR(quaternion_norm, 1.0f, 0.1f);
+    });
+    
+    // 清理测试路径点
+    tbot_->deleteWaypoint("precision_test");
+}
+
+// 测试路径点操作错误处理
+TEST_F(RealWaypointsTest, TestWaypointErrorHandling) {
+    // 测试在未连接状态下操作路径点
+    auto disconnected_tbot = std::make_unique<TBotSDK>("192.168.8.110");
+    
+    bool save_result = disconnected_tbot->saveWaypoint("test", {1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, "test");
+    EXPECT_FALSE(save_result);
+    
+    bool load_result = disconnected_tbot->loadWaypoint("test", [](const Waypoint& waypoint) {
+        FAIL() << "Should not load waypoint when not connected";
+    });
+    EXPECT_FALSE(load_result);
+    
+    bool nav_result = disconnected_tbot->navigateToWaypoint("test");
+    EXPECT_FALSE(nav_result);
+}
+
+// 测试路径点管理
+TEST_F(RealWaypointsTest, TestWaypointManagement) {
+    // 创建多个测试路径点
+    std::vector<std::string> test_waypoints = {"wp1", "wp2", "wp3"};
+    
+    for (const auto& name : test_waypoints) {
+        tbot_->saveWaypoint(name, {1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, "Test waypoint");
+    }
+    
+    // 获取所有路径点
+    auto waypoints = tbot_->getAllWaypoints();
+    EXPECT_GE(waypoints.size(), test_waypoints.size());
+    
+    // 验证所有测试路径点都存在
+    for (const auto& test_name : test_waypoints) {
+        bool found = false;
+        for (const auto& waypoint : waypoints) {
+            if (waypoint.name == test_name) {
+                found = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(found) << "Test waypoint " << test_name << " not found";
+    }
+    
+    // 清理测试路径点
+    for (const auto& name : test_waypoints) {
+        tbot_->deleteWaypoint(name);
+    }
 }
 
 int main(int argc, char** argv) {

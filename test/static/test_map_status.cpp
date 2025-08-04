@@ -1,251 +1,234 @@
 #include <gtest/gtest.h>
-#include <gmock/gmock.h>
 #include "tbot_sdk/TBotSDK.h"
 #include <memory>
 #include <string>
 #include <vector>
 
 using namespace TBot;
-using ::testing::_;
-using ::testing::Return;
-using ::testing::StrictMock;
 
-// Mock类用于测试地图状态功能
-class MockTBotSDK : public TBotSDK {
-public:
-    MockTBotSDK(const std::string& ip = "192.168.8.110") : TBotSDK(ip) {}
-    
-    MOCK_METHOD(std::vector<std::string>, getMapList, (StatusCallback callback), (override));
-    MOCK_METHOD(bool, getCurrentMap, (MapInfoCallback callback), (override));
-    MOCK_METHOD(bool, getMapStatus, (MapStatusCallback callback), (override));
-    MOCK_METHOD(bool, isMapLoaded, (), (const, override));
-};
-
-class MapStatusTest : public ::testing::Test {
+class RealMapStatusTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        mock_tbot_ = std::make_unique<StrictMock<MockTBotSDK>>("192.168.8.110");
+        tbot_ = std::make_unique<TBotSDK>("192.168.8.110");
+        tbot_->connect();
     }
     
     void TearDown() override {
-        mock_tbot_.reset();
+        if (tbot_->isConnected()) {
+            tbot_->disconnect();
+        }
+        tbot_.reset();
     }
     
-    std::unique_ptr<StrictMock<MockTBotSDK>> mock_tbot_;
+    std::unique_ptr<TBotSDK> tbot_;
 };
 
 // 测试获取地图列表
-TEST_F(MapStatusTest, TestGetMapList) {
-    std::vector<std::string> expected_maps = {"map1", "map2", "map3"};
+TEST_F(RealMapStatusTest, TestGetMapList) {
+    auto maps = tbot_->getMapList();
     
-    EXPECT_CALL(*mock_tbot_, getMapList(_))
-        .WillOnce(Return(expected_maps));
+    // 验证地图列表不为空（假设机器人上至少有一个地图）
+    EXPECT_FALSE(maps.empty());
     
-    auto maps = mock_tbot_->getMapList([](int code, const std::string& message) {
-        EXPECT_EQ(code, 0);
-        EXPECT_EQ(message, "Success");
-    });
+    // 验证每个地图名称都是有效的
+    for (const auto& map_name : maps) {
+        EXPECT_FALSE(map_name.empty());
+        EXPECT_GT(map_name.length(), 0);
+        EXPECT_LT(map_name.length(), 100); // 地图名称不应该过长
+    }
     
-    EXPECT_EQ(maps.size(), 3);
-    EXPECT_EQ(maps[0], "map1");
-    EXPECT_EQ(maps[1], "map2");
-    EXPECT_EQ(maps[2], "map3");
+    std::cout << "Found " << maps.size() << " maps: ";
+    for (const auto& map : maps) {
+        std::cout << map << " ";
+    }
+    std::cout << std::endl;
 }
 
 // 测试获取当前地图
-TEST_F(MapStatusTest, TestGetCurrentMap) {
-    EXPECT_CALL(*mock_tbot_, getCurrentMap(_))
-        .WillOnce(Return(true));
+TEST_F(RealMapStatusTest, TestGetCurrentMap) {
+    bool callback_called = false;
     
-    bool result = mock_tbot_->getCurrentMap([](const MapInfo& mapInfo) {
-        EXPECT_EQ(mapInfo.name, "current_map");
-        EXPECT_FLOAT_EQ(mapInfo.resolution, 0.05);
-        EXPECT_EQ(mapInfo.width, 1000);
-        EXPECT_EQ(mapInfo.height, 1000);
+    bool result = tbot_->getCurrentMap([&callback_called](const MapInfo& mapInfo) {
+        callback_called = true;
+        
+        // 验证地图信息的基本字段
+        EXPECT_FALSE(mapInfo.name.empty());
+        EXPECT_GT(mapInfo.resolution, 0);
+        EXPECT_GT(mapInfo.width, 0);
+        EXPECT_GT(mapInfo.height, 0);
         EXPECT_FALSE(mapInfo.data.empty());
-        EXPECT_FLOAT_EQ(mapInfo.origin.position.x, -25.0);
-        EXPECT_FLOAT_EQ(mapInfo.origin.position.y, -25.0);
-        EXPECT_FLOAT_EQ(mapInfo.origin.position.z, 0.0);
+        
+        // 验证地图原点
+        EXPECT_FINITE(mapInfo.origin.position.x);
+        EXPECT_FINITE(mapInfo.origin.position.y);
+        EXPECT_FINITE(mapInfo.origin.position.z);
+        
+        std::cout << "Current map: " << mapInfo.name 
+                  << ", resolution: " << mapInfo.resolution
+                  << ", size: " << mapInfo.width << "x" << mapInfo.height << std::endl;
     });
     
     EXPECT_TRUE(result);
-}
-
-// 测试获取地图状态
-TEST_F(MapStatusTest, TestGetMapStatus) {
-    EXPECT_CALL(*mock_tbot_, getMapStatus(_))
-        .WillOnce(Return(true));
-    
-    bool result = mock_tbot_->getMapStatus([](const MapStatus& status) {
-        EXPECT_EQ(status.is_loaded, true);
-        EXPECT_EQ(status.is_valid, true);
-        EXPECT_EQ(status.name, "test_map");
-        EXPECT_FLOAT_EQ(status.resolution, 0.05);
-        EXPECT_EQ(status.width, 1000);
-        EXPECT_EQ(status.height, 1000);
-        EXPECT_FLOAT_EQ(status.origin.x, -25.0);
-        EXPECT_FLOAT_EQ(status.origin.y, -25.0);
-    });
-    
-    EXPECT_TRUE(result);
+    EXPECT_TRUE(callback_called);
 }
 
 // 测试地图是否已加载
-TEST_F(MapStatusTest, TestIsMapLoaded) {
-    EXPECT_CALL(*mock_tbot_, isMapLoaded())
-        .WillOnce(Return(true))
-        .WillOnce(Return(false));
+TEST_F(RealMapStatusTest, TestIsMapLoaded) {
+    bool is_loaded = tbot_->isMapLoaded();
     
-    EXPECT_TRUE(mock_tbot_->isMapLoaded());
-    EXPECT_FALSE(mock_tbot_->isMapLoaded());
-}
-
-// 测试获取地图列表失败
-TEST_F(MapStatusTest, TestGetMapListFailure) {
-    std::vector<std::string> empty_maps;
-    
-    EXPECT_CALL(*mock_tbot_, getMapList(_))
-        .WillOnce(Return(empty_maps));
-    
-    auto maps = mock_tbot_->getMapList([](int code, const std::string& message) {
-        EXPECT_EQ(code, -1);
-        EXPECT_EQ(message, "Failed to get map list");
-    });
-    
-    EXPECT_TRUE(maps.empty());
-}
-
-// 测试获取当前地图失败
-TEST_F(MapStatusTest, TestGetCurrentMapFailure) {
-    EXPECT_CALL(*mock_tbot_, getCurrentMap(_))
-        .WillOnce(Return(false));
-    
-    bool result = mock_tbot_->getCurrentMap([](const MapInfo& mapInfo) {
-        // 这个回调不应该被调用
-        FAIL() << "Current map callback should not be called";
-    });
-    
-    EXPECT_FALSE(result);
-}
-
-// 测试获取地图状态失败
-TEST_F(MapStatusTest, TestGetMapStatusFailure) {
-    EXPECT_CALL(*mock_tbot_, getMapStatus(_))
-        .WillOnce(Return(false));
-    
-    bool result = mock_tbot_->getMapStatus([](const MapStatus& status) {
-        // 这个回调不应该被调用
-        FAIL() << "Map status callback should not be called";
-    });
-    
-    EXPECT_FALSE(result);
+    // 验证返回值为布尔值
+    // 注意：这个值取决于机器人当前的状态
+    std::cout << "Map loaded status: " << (is_loaded ? "true" : "false") << std::endl;
 }
 
 // 测试地图信息内容验证
-TEST_F(MapStatusTest, TestMapInfoContent) {
-    MapInfo testMap;
-    testMap.name = "test_map";
-    testMap.resolution = 0.1;
-    testMap.width = 500;
-    testMap.height = 500;
-    testMap.data = {0, 1, 2, 3, 4, 5};
-    testMap.origin.position.x = -10.0;
-    testMap.origin.position.y = -10.0;
-    testMap.origin.position.z = 0.0;
+TEST_F(RealMapStatusTest, TestMapInfoContent) {
+    bool map_received = false;
     
-    EXPECT_EQ(testMap.name, "test_map");
-    EXPECT_FLOAT_EQ(testMap.resolution, 0.1);
-    EXPECT_EQ(testMap.width, 500);
-    EXPECT_EQ(testMap.height, 500);
-    EXPECT_EQ(testMap.data.size(), 6);
-    EXPECT_FLOAT_EQ(testMap.origin.position.x, -10.0);
-    EXPECT_FLOAT_EQ(testMap.origin.position.y, -10.0);
-    EXPECT_FLOAT_EQ(testMap.origin.position.z, 0.0);
-}
-
-// 测试地图状态内容验证
-TEST_F(MapStatusTest, TestMapStatusContent) {
-    MapStatus testStatus;
-    testStatus.is_loaded = true;
-    testStatus.is_valid = true;
-    testStatus.name = "valid_map";
-    testStatus.resolution = 0.05;
-    testStatus.width = 2000;
-    testStatus.height = 2000;
-    testStatus.origin.x = -50.0;
-    testStatus.origin.y = -50.0;
+    tbot_->getCurrentMap([&map_received](const MapInfo& mapInfo) {
+        map_received = true;
+        
+        // 验证地图名称
+        EXPECT_FALSE(mapInfo.name.empty());
+        EXPECT_GT(mapInfo.name.length(), 0);
+        
+        // 验证地图分辨率
+        EXPECT_GT(mapInfo.resolution, 0);
+        EXPECT_LT(mapInfo.resolution, 1.0); // 分辨率应该小于1米
+        
+        // 验证地图尺寸
+        EXPECT_GT(mapInfo.width, 0);
+        EXPECT_GT(mapInfo.height, 0);
+        EXPECT_LE(mapInfo.width, 10000); // 地图宽度不应该过大
+        EXPECT_LE(mapInfo.height, 10000); // 地图高度不应该过大
+        
+        // 验证地图数据
+        EXPECT_FALSE(mapInfo.data.empty());
+        EXPECT_EQ(mapInfo.data.size(), mapInfo.width * mapInfo.height);
+        
+        // 验证地图原点
+        EXPECT_FINITE(mapInfo.origin.position.x);
+        EXPECT_FINITE(mapInfo.origin.position.y);
+        EXPECT_FINITE(mapInfo.origin.position.z);
+        EXPECT_FINITE(mapInfo.origin.orientation.x);
+        EXPECT_FINITE(mapInfo.origin.orientation.y);
+        EXPECT_FINITE(mapInfo.origin.orientation.z);
+        EXPECT_FINITE(mapInfo.origin.orientation.w);
+        
+        // 验证地图数据内容
+        bool has_occupied = false;
+        bool has_free = false;
+        bool has_unknown = false;
+        
+        for (int8_t cell : mapInfo.data) {
+            if (cell > 0) has_occupied = true;
+            else if (cell == 0) has_free = true;
+            else has_unknown = true;
+        }
+        
+        // 地图应该包含至少一些有效数据
+        EXPECT_TRUE(has_free || has_occupied);
+    });
     
-    EXPECT_TRUE(testStatus.is_loaded);
-    EXPECT_TRUE(testStatus.is_valid);
-    EXPECT_EQ(testStatus.name, "valid_map");
-    EXPECT_FLOAT_EQ(testStatus.resolution, 0.05);
-    EXPECT_EQ(testStatus.width, 2000);
-    EXPECT_EQ(testStatus.height, 2000);
-    EXPECT_FLOAT_EQ(testStatus.origin.x, -50.0);
-    EXPECT_FLOAT_EQ(testStatus.origin.y, -50.0);
+    EXPECT_TRUE(map_received);
 }
 
 // 测试地图边界条件
-TEST_F(MapStatusTest, TestMapBoundaryConditions) {
-    // 测试空地图
-    MapInfo emptyMap;
-    emptyMap.name = "";
-    emptyMap.width = 0;
-    emptyMap.height = 0;
-    emptyMap.data.clear();
+TEST_F(RealMapStatusTest, TestMapBoundaryConditions) {
+    auto maps = tbot_->getMapList();
     
-    EXPECT_TRUE(emptyMap.name.empty());
-    EXPECT_EQ(emptyMap.width, 0);
-    EXPECT_EQ(emptyMap.height, 0);
-    EXPECT_TRUE(emptyMap.data.empty());
-    
-    // 测试无效地图状态
-    MapStatus invalidStatus;
-    invalidStatus.is_loaded = false;
-    invalidStatus.is_valid = false;
-    invalidStatus.name = "";
-    invalidStatus.width = 0;
-    invalidStatus.height = 0;
-    
-    EXPECT_FALSE(invalidStatus.is_loaded);
-    EXPECT_FALSE(invalidStatus.is_valid);
-    EXPECT_TRUE(invalidStatus.name.empty());
-    EXPECT_EQ(invalidStatus.width, 0);
-    EXPECT_EQ(invalidStatus.height, 0);
+    if (!maps.empty()) {
+        // 测试切换到第一个地图
+        bool switch_result = tbot_->switchMap(maps[0]);
+        EXPECT_TRUE(switch_result);
+        
+        // 验证地图已加载
+        bool is_loaded = tbot_->isMapLoaded();
+        EXPECT_TRUE(is_loaded);
+        
+        // 获取切换后的地图信息
+        bool map_received = false;
+        tbot_->getCurrentMap([&map_received, &maps](const MapInfo& mapInfo) {
+            map_received = true;
+            EXPECT_EQ(mapInfo.name, maps[0]);
+        });
+        
+        EXPECT_TRUE(map_received);
+    }
 }
 
 // 测试地图分辨率验证
-TEST_F(MapStatusTest, TestMapResolutionValidation) {
-    // 测试不同分辨率
-    std::vector<float> resolutions = {0.01, 0.05, 0.1, 0.2, 0.5};
-    
-    for (float resolution : resolutions) {
-        MapInfo testMap;
-        testMap.resolution = resolution;
+TEST_F(RealMapStatusTest, TestMapResolutionValidation) {
+    tbot_->getCurrentMap([](const MapInfo& mapInfo) {
+        // 验证分辨率在合理范围内
+        EXPECT_GT(mapInfo.resolution, 0.01); // 分辨率应该大于1cm
+        EXPECT_LT(mapInfo.resolution, 1.0);  // 分辨率应该小于1m
         
-        EXPECT_FLOAT_EQ(testMap.resolution, resolution);
-        EXPECT_GT(testMap.resolution, 0.0);
-        EXPECT_LE(testMap.resolution, 1.0);
-    }
+        // 分辨率应该是合理的值（常见值：0.05, 0.1, 0.2等）
+        float resolution = mapInfo.resolution;
+        bool is_reasonable = (resolution == 0.05f || resolution == 0.1f || 
+                             resolution == 0.2f || resolution == 0.25f);
+        
+        if (!is_reasonable) {
+            std::cout << "Warning: Unusual map resolution: " << resolution << std::endl;
+        }
+    });
 }
 
 // 测试地图尺寸验证
-TEST_F(MapStatusTest, TestMapSizeValidation) {
-    // 测试不同地图尺寸
-    std::vector<std::pair<int, int>> sizes = {
-        {100, 100}, {500, 500}, {1000, 1000}, {2000, 2000}
-    };
-    
-    for (const auto& size : sizes) {
-        MapInfo testMap;
-        testMap.width = size.first;
-        testMap.height = size.second;
+TEST_F(RealMapStatusTest, TestMapSizeValidation) {
+    tbot_->getCurrentMap([](const MapInfo& mapInfo) {
+        // 验证地图尺寸在合理范围内
+        EXPECT_GT(mapInfo.width, 100);   // 地图宽度应该大于100像素
+        EXPECT_GT(mapInfo.height, 100);  // 地图高度应该大于100像素
+        EXPECT_LE(mapInfo.width, 10000); // 地图宽度不应该过大
+        EXPECT_LE(mapInfo.height, 10000); // 地图高度不应该过大
         
-        EXPECT_EQ(testMap.width, size.first);
-        EXPECT_EQ(testMap.height, size.second);
-        EXPECT_GT(testMap.width, 0);
-        EXPECT_GT(testMap.height, 0);
-    }
+        // 验证地图尺寸比例合理（不应该过于细长）
+        float aspect_ratio = static_cast<float>(mapInfo.width) / mapInfo.height;
+        EXPECT_GT(aspect_ratio, 0.1);  // 宽高比应该大于0.1
+        EXPECT_LT(aspect_ratio, 10.0); // 宽高比应该小于10
+        
+        std::cout << "Map size: " << mapInfo.width << "x" << mapInfo.height 
+                  << ", aspect ratio: " << aspect_ratio << std::endl;
+    });
+}
+
+// 测试地图操作错误处理
+TEST_F(RealMapStatusTest, TestMapOperationErrors) {
+    // 测试切换到不存在的地图
+    bool switch_result = tbot_->switchMap("non_existent_map");
+    EXPECT_FALSE(switch_result);
+    
+    // 测试删除不存在的地图
+    bool delete_result = tbot_->deleteMap("non_existent_map");
+    EXPECT_FALSE(delete_result);
+}
+
+// 测试地图数据完整性
+TEST_F(RealMapStatusTest, TestMapDataIntegrity) {
+    tbot_->getCurrentMap([](const MapInfo& mapInfo) {
+        // 验证地图数据大小正确
+        size_t expected_size = mapInfo.width * mapInfo.height;
+        EXPECT_EQ(mapInfo.data.size(), expected_size);
+        
+        // 验证地图数据内容
+        int occupied_cells = 0;
+        int free_cells = 0;
+        int unknown_cells = 0;
+        
+        for (int8_t cell : mapInfo.data) {
+            if (cell > 0) occupied_cells++;
+            else if (cell == 0) free_cells++;
+            else unknown_cells++;
+        }
+        
+        // 地图应该包含一些有效数据
+        EXPECT_GT(free_cells + occupied_cells, 0);
+        
+        std::cout << "Map data: " << occupied_cells << " occupied, " 
+                  << free_cells << " free, " << unknown_cells << " unknown cells" << std::endl;
+    });
 }
 
 int main(int argc, char** argv) {
